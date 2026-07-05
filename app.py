@@ -1,51 +1,51 @@
-from fastapi import FastAPI, Form
-from fastapi.responses import HTMLResponse, JSONResponse
-import httpx
+from flask import Flask, request, jsonify, render_template_string
+import requests
 import re
 
-app = FastAPI(title="TeleSpotter")
+app = Flask(__name__)
 
 HTML = """
 <!DOCTYPE html>
 <html>
-<head><title>TeleSpotter</title>
-<style>body{background:#111;color:#0f0;font-family:monospace;padding:40px;text-align:center;}
-input,button{padding:15px;font-size:18px;margin:10px;width:300px;}</style>
+<head>
+<title>TeleSpotter PY</title>
+<style>
+body{background:#000;color:#0f0;font-family:monospace;padding:30px;text-align:center;}
+.phone{border:10px solid #0f0;border-radius:25px;padding:30px;max-width:400px;margin:40px auto;}
+input,button{padding:15px;font-size:18px;width:90%;margin:10px;}
+button{background:#0f0;color:#000;}
+</style>
 </head>
 <body>
-<h1>📱 TELESPOTTER PY</h1>
-<form action="/search" method="post">
-<input name="phone" placeholder="5555551212" required><br>
+<div class="phone">
+<h1>📱 TELESPOTTER</h1>
+<form method="post">
+<input name="phone" placeholder="5555551212" required>
 <button type="submit">SCAN</button>
 </form>
-<div id="r"></div>
-<script>
-document.querySelector('form').onsubmit=async(e)=>{e.preventDefault();
-const f=new FormData(e.target);
-const res=await fetch('/search',{method:'POST',body:f});
-const d=await res.json();
-document.getElementById('r').innerHTML='<h2>Results:</h2>'+JSON.stringify(d.results);
-};
-</script>
+</div>
 </body>
 </html>
 """
 
-@app.get("/", response_class=HTMLResponse)
-async def home():
+@app.route("/", methods=["GET"])
+def home():
     return HTML
 
-@app.post("/search")
-async def search(phone: str = Form(...)):
+@app.route("/search", methods=["POST"])
+def search():
+    phone = request.form.get("phone", "")
+    results = []
     try:
-        async with httpx.AsyncClient(timeout=10.0) as c:
-            r = await c.get(f"https://www.google.com/search?q={phone}", headers={"User-Agent":"Mozilla/5.0"})
-            text = r.text
-            titles = re.findall(r'<h3[^>]*>(.*?)</h3>', text, re.I)[:10]
-            return {"phone": phone, "results": [{"title": t} for t in titles], "status": "ok"}
-    except Exception as e:
-        return {"phone": phone, "results": [], "error": str(e)[:100]}
+        for q in [phone, re.sub(r'\D', '', phone)]:
+            r = requests.get(f"https://www.google.com/search?q={q}", 
+                           headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+            titles = re.findall(r'<h3[^>]*>([^<]+)</h3>', r.text)[:8]
+            for t in titles:
+                results.append({"title": t.strip()})
+    except:
+        pass
+    return jsonify({"phone": phone, "results": results[:12]})
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    app.run(host="0.0.0.0", port=8000)
